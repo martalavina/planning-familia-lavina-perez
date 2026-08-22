@@ -28,11 +28,7 @@ function refreshPantryBuyButtons(){
     refreshingBuyButtons=false;
   }
 }
-let refreshTimer=null;
-const observer=new MutationObserver(()=>{
-  clearTimeout(refreshTimer);
-  refreshTimer=setTimeout(refreshPantryBuyButtons,40);
-});
+const observer=new MutationObserver(()=>refreshPantryBuyButtons());
 observer.observe(document.getElementById('app'),{childList:true,subtree:true});
 refreshPantryBuyButtons();
 document.addEventListener('click',e=>{
