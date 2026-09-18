@@ -26,7 +26,7 @@ function normalize(s={}){
 async function api(url,opt){const r=await fetch(url,opt);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Object.assign(new Error(d.error||'Error'),{status:r.status});return d}
 function isEditing(){const a=document.activeElement;return saving||Date.now()-editing<2200||!!(a&&['INPUT','TEXTAREA','SELECT'].includes(a.tagName))}
 async function check(){try{auth=(await api('/api/check')).ok;if(auth)await load()}catch{auth=false}render()}
-async function load(quiet=false){if(quiet&&isEditing())return;try{const d=normalize(await api('/api/planner'));if(!isEditing()){state=d;render()}}catch(e){if(e.status===401){auth=false;render()}else if(!quiet){status=e.message;render()}}}
+async function load(quiet=false){if(quiet&&isEditing())return;try{const d=normalize(await api('/api/planner'));if(!isEditing()){if(quiet&&state&&JSON.stringify(d)===JSON.stringify(state))return;state=d;render()}}catch(e){if(e.status===401){auth=false;render()}else if(!quiet){status=e.message;render()}}}
 function who(){return state?.profiles?.find(p=>p.id===actor)?.name||'Familia Laviña Pérez'}
 function stamp(action){return {id:id(),actor:who(),action,at:new Date().toISOString()}}
 async function save(next,action='actualizó la aplicación'){editing=Date.now();saving=true;state=normalize({...next,history:[stamp(action),...(next.history||state?.history||[])].slice(0,50)});status='Guardando…';render();try{state=normalize(await api('/api/planner',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...state,updatedBy:who()})}));status='Guardado ✓';render();setTimeout(()=>{status='';saving=false;render()},650)}catch(e){saving=false;status='Error al guardar: '+e.message;render()}}
