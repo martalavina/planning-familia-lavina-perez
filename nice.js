@@ -1,5 +1,5 @@
 (()=>{
-let nice=null,tab=localStorage.getItem('nice-tab')||'planning',busy=false,ingredientOpen='',pantryFilter='all',pantrySearch='',recipeSearch='';
+let nice=null,tab=localStorage.getItem('nice-tab')||'planning',busy=false,ingredientOpen='',pantryFilter='all',pantrySearch='',recipeSearch='',recipeEditId='',recipeDraft=null;
 const root=()=>document.getElementById('app');
 const norm=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const uid=()=>crypto.randomUUID();
@@ -111,8 +111,17 @@ function mealCard(day,i,kind,label){
  ${mealIngredientHtml(day,i,kind)}</div>`;
 }
 function recipeCard(r){
+ if(recipeEditId===r.id&&recipeDraft){
+   return `<article class="nice-recipe-card editing"><div class="nice-recipe-edit-head"><span>EDITANDO RECETA</span><button data-cancel-recipe-edit title="Cancelar">×</button></div>
+   <label class="nice-recipe-field"><span>Nombre</span><input id="nice-edit-recipe-name" value="${esc(recipeDraft.name)}"></label>
+   <label class="nice-recipe-field"><span>Descripción</span><textarea id="nice-edit-recipe-note" placeholder="Ej. Montar en una fuente pequeña y gratinar…">${esc(recipeDraft.note||'')}</textarea></label>
+   <div class="nice-recipe-edit-ings"><div class="nice-recipe-edit-label"><span>Ingredientes</span><small>${recipeDraft.ingredients.length}</small></div>
+   ${recipeDraft.ingredients.map((i,idx)=>`<div class="nice-recipe-edit-ing"><input data-edit-recipe-ing="${idx}" value="${esc(i.name)}"><button data-remove-recipe-ing="${idx}" title="Quitar ingrediente">×</button></div>`).join('')}
+   <div class="nice-recipe-add-ing"><input id="nice-edit-recipe-new-ing" placeholder="Añadir ingrediente…"><button id="nice-edit-recipe-add-ing">＋</button></div></div>
+   <div class="nice-recipe-edit-actions"><button data-cancel-recipe-edit class="secondary">Cancelar</button><button id="nice-save-recipe-edit" class="primary">Guardar cambios</button></div></article>`;
+ }
  const miss=(r.ingredients||[]).filter(i=>!pantryHas(i.name)&&!shoppingHas(i.name));
- return `<article class="nice-recipe-card"><div class="nice-recipe-top"><div><h4>${esc(r.name)}</h4><span>${r.ingredients.length} ingredientes</span></div><button data-del-recipe="${r.id}" title="Eliminar">×</button></div>${r.note?`<p>${esc(r.note)}</p>`:''}<div class="nice-recipe-status">${miss.length?`<span class="warn">⚠ Te faltan ${miss.length}</span>`:'<span class="ok">✓ Puedes hacerla</span>'}</div><details><summary>Ver ingredientes</summary><div class="nice-recipe-ings">${r.ingredients.map(i=>`<span class="${pantryHas(i.name)?'have':shoppingHas(i.name)?'buying':'missing'}">${esc(i.name)}</span>`).join('')}</div></details></article>`;
+ return `<article class="nice-recipe-card"><div class="nice-recipe-top"><div><h4>${esc(r.name)}</h4><span>${r.ingredients.length} ingredientes</span></div><div class="nice-recipe-card-actions"><button data-edit-recipe="${r.id}" title="Editar receta">✎</button><button data-del-recipe="${r.id}" title="Eliminar">×</button></div></div>${r.note?`<p>${esc(r.note)}</p>`:''}<div class="nice-recipe-status">${miss.length?`<span class="warn">⚠ Te faltan ${miss.length}</span>`:'<span class="ok">✓ Puedes hacerla</span>'}</div><details><summary>Ver ingredientes</summary><div class="nice-recipe-ings">${r.ingredients.map(i=>`<span class="${pantryHas(i.name)?'have':shoppingHas(i.name)?'buying':'missing'}">${esc(i.name)}</span>`).join('')}</div></details></article>`;
 }
 function renderNice(){
  if(!isMarta())return;let sec=document.getElementById('nice-marta');if(!sec){mount();sec=document.getElementById('nice-marta');if(!sec)return}
@@ -170,6 +179,12 @@ function bind(){
  document.querySelectorAll('[data-save-from-meal]').forEach(b=>b.onclick=()=>{const [d,k]=b.dataset.saveFromMeal.split(':'),day=nice.weeks[key()][+d],name=day[k];if(!name||recipeByName(name))return;nice.recipes.unshift({id:uid(),name,ingredients:normalizeIngs(day[k+'Ingredients']),note:'',seed:false});save()});
  const rs=document.getElementById('nice-recipe-search');if(rs)rs.oninput=()=>{recipeSearch=rs.value;renderNice()};
  const addRecipe=document.getElementById('nice-add-recipe');if(addRecipe)addRecipe.onclick=()=>{const n=document.getElementById('nice-recipe-name').value.trim(),raw=document.getElementById('nice-recipe-ingredients').value,nt=document.getElementById('nice-recipe-note').value.trim();if(!n||recipeByName(n))return;const ingredients=raw.split(',').map(x=>x.trim()).filter(Boolean).map(name=>({id:uid(),name}));nice.recipes.unshift({id:uid(),name:n,ingredients,note:nt,seed:false});save()};
+ document.querySelectorAll('[data-edit-recipe]').forEach(b=>b.onclick=()=>{const r=nice.recipes.find(x=>x.id===b.dataset.editRecipe);if(!r)return;recipeEditId=r.id;recipeDraft={...r,ingredients:normalizeIngs(r.ingredients)};renderNice()});
+ document.querySelectorAll('[data-cancel-recipe-edit]').forEach(b=>b.onclick=()=>{recipeEditId='';recipeDraft=null;renderNice()});
+ document.querySelectorAll('[data-edit-recipe-ing]').forEach(inp=>inp.oninput=()=>{if(recipeDraft?.ingredients[+inp.dataset.editRecipeIng])recipeDraft.ingredients[+inp.dataset.editRecipeIng].name=inp.value});
+ document.querySelectorAll('[data-remove-recipe-ing]').forEach(b=>b.onclick=()=>{if(!recipeDraft)return;recipeDraft.ingredients.splice(+b.dataset.removeRecipeIng,1);renderNice()});
+ const addEditIng=document.getElementById('nice-edit-recipe-add-ing');if(addEditIng){const fn=()=>{const inp=document.getElementById('nice-edit-recipe-new-ing'),v=inp.value.trim();if(!v||!recipeDraft||recipeDraft.ingredients.some(i=>norm(i.name)===norm(v)))return;recipeDraft.ingredients.push({id:uid(),name:v});renderNice()};addEditIng.onclick=fn;document.getElementById('nice-edit-recipe-new-ing').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();fn()}}}
+ const saveEdit=document.getElementById('nice-save-recipe-edit');if(saveEdit)saveEdit.onclick=()=>{if(!recipeDraft)return;const name=document.getElementById('nice-edit-recipe-name').value.trim(),note=document.getElementById('nice-edit-recipe-note').value.trim();if(!name)return;recipeDraft.name=name;recipeDraft.note=note;recipeDraft.ingredients=recipeDraft.ingredients.map(i=>({...i,name:String(i.name||'').trim()})).filter(i=>i.name);nice.recipes=nice.recipes.map(r=>r.id===recipeEditId?{...recipeDraft}:r);recipeEditId='';recipeDraft=null;save()};
  document.querySelectorAll('[data-del-recipe]').forEach(b=>b.onclick=()=>{nice.recipes=nice.recipes.filter(r=>r.id!==b.dataset.delRecipe);save()});
 }
 let timer;new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(mount,80)}).observe(root(),{childList:true,subtree:true});mount();
