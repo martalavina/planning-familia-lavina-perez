@@ -97,17 +97,39 @@ function exportPantryPDF(){
     const purchase=shoppingHas(x.text)?' · Ya apuntado en compra':'';
     return `<tr><td>${esc(x.text)}</td><td>${x.count||1}</td><td>${status}${purchase}</td></tr>`;
   }).join('');
-  const w=window.open('','_blank','noopener,noreferrer');
-  if(!w)return;
-  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Despensa de Niza · Marta</title><style>
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Despensa de Niza · Marta</title><style>
   @page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#293126;margin:0}h1{font-family:Georgia,serif;font-size:28px;margin:0 0 4px}p{font-size:11px;line-height:1.5;color:#62685f}.meta{font-size:10px;color:#7b8178;margin-bottom:20px}.note{background:#f3f6f0;border:1px solid #dbe3d6;border-radius:12px;padding:12px 14px;margin:18px 0}.note strong{display:block;margin-bottom:4px;color:#43503e}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid #e5e8e1;font-size:11px}th{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#788071}.foot{margin-top:18px;font-size:9px;color:#8a8f86}</style></head><body>
   <h1>Despensa de Niza</h1><div class="meta">Marta · Actualizada a ${date}</div>
   <div class="note"><strong>Contexto para hacer el planning semanal</strong><p>Este documento muestra lo que hay disponible en casa. No es necesario usar toda la despensa ni terminar productos completos. Se pueden usar cantidades parciales y solo los ingredientes que tengan sentido para cada comida. La prioridad es crear un planning práctico, variado y realista.</p></div>
   <table><thead><tr><th>Producto</th><th>Cantidad</th><th>Estado</th></tr></thead><tbody>${rows||'<tr><td colspan="3">Despensa vacía</td></tr>'}</tbody></table>
   <div class="foot">Generado desde Mi vida en Niza · Planning Familia Laviña Pérez</div>
-  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
-  w.document.close();
+  </body></html>`;
+  const frame=document.createElement('iframe');
+  frame.style.position='fixed';
+  frame.style.right='0';
+  frame.style.bottom='0';
+  frame.style.width='1px';
+  frame.style.height='1px';
+  frame.style.border='0';
+  frame.style.opacity='0';
+  frame.setAttribute('aria-hidden','true');
+  document.body.appendChild(frame);
+  const doc=frame.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  const doPrint=()=>{
+    try{
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    }finally{
+      setTimeout(()=>frame.remove(),1500);
+    }
+  };
+  if(doc.readyState==='complete')setTimeout(doPrint,150);
+  else frame.onload=()=>setTimeout(doPrint,150);
 }
+
 function addShoppingText(text){text=text.trim();if(!text||shoppingHas(text))return false;nice.shopping.push({id:uid(),text});return true}
 function addIngredient(dayIndex,kind,name){name=name.trim();if(!name)return false;const arr=nice.weeks[key()][dayIndex][kind+'Ingredients'];if(arr.some(i=>norm(i.name||i.text)===norm(name)))return false;arr.push({id:uid(),name});return true}
 function bind(){
