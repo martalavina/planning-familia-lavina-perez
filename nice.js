@@ -82,13 +82,31 @@ function renderNice(){
     ${quickFromPantry.length?`<div class="nice-quick"><span>Añadir desde despensa</span><div>${quickFromPantry.map(p=>`<button data-nice-quick-shop="${p.id}">＋ ${esc(p.text)}</button>`).join('')}</div></div>`:''}
     <div class="nice-shop-list">${shop}</div>`:
   tab==='pantry'?
-    `<div class="nice-title"><div><p class="eyebrow">DESPENSA DE NIZA</p><h3>Lo que tienes ahora mismo</h3></div><span>${nice.pantry.length} productos</span></div>
+    `<div class="nice-title"><div><p class="eyebrow">DESPENSA DE NIZA</p><h3>Lo que tienes ahora mismo</h3></div><div class="nice-title-actions"><span>${nice.pantry.length} productos</span><button id="nice-export-pantry" class="nice-export">⇩ Exportar PDF</button></div></div>
     <div class="nice-pantry-tools"><input id="nice-pantry-search" value="${esc(pantrySearch)}" placeholder="Buscar…"><div class="nice-filter"><button data-pfilter="all" class="${pantryFilter==='all'?'active':''}">Todo</button><button data-pfilter="low" class="${pantryFilter==='low'?'active':''}">Queda poco</button><button data-pfilter="shopping" class="${pantryFilter==='shopping'?'active':''}">En compra</button></div></div>
     <div class="nice-pantry-list">${pantry}</div>
     <div class="nice-add"><input id="nice-new-pantry" placeholder="Añadir producto…"><button id="nice-add-pantry">＋ Añadir</button></div>`:
     `<div class="nice-planning-head"><div><p class="eyebrow">PLANNING SEMANAL</p><h3>Tu semana, de un vistazo</h3><p>Escribe solo el plato o abre ingredientes si quieres comprobar qué tienes.</p></div><div class="nice-week"><button id="nice-prev">←</button><strong>${weekLabel()}</strong><button id="nice-next">→</button></div></div><div class="nice-days">${days}</div>`}
   </div>`;
   bind();
+}
+function exportPantryPDF(){
+  const date=new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'long',year:'numeric'}).format(new Date());
+  const rows=nice.pantry.map(x=>{
+    const status=x.low?'Queda poco':'Disponible';
+    const purchase=shoppingHas(x.text)?' · Ya apuntado en compra':'';
+    return `<tr><td>${esc(x.text)}</td><td>${x.count||1}</td><td>${status}${purchase}</td></tr>`;
+  }).join('');
+  const w=window.open('','_blank','noopener,noreferrer');
+  if(!w)return;
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Despensa de Niza · Marta</title><style>
+  @page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#293126;margin:0}h1{font-family:Georgia,serif;font-size:28px;margin:0 0 4px}p{font-size:11px;line-height:1.5;color:#62685f}.meta{font-size:10px;color:#7b8178;margin-bottom:20px}.note{background:#f3f6f0;border:1px solid #dbe3d6;border-radius:12px;padding:12px 14px;margin:18px 0}.note strong{display:block;margin-bottom:4px;color:#43503e}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid #e5e8e1;font-size:11px}th{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#788071}.foot{margin-top:18px;font-size:9px;color:#8a8f86}</style></head><body>
+  <h1>Despensa de Niza</h1><div class="meta">Marta · Actualizada a ${date}</div>
+  <div class="note"><strong>Contexto para hacer el planning semanal</strong><p>Este documento muestra lo que hay disponible en casa. No es necesario usar toda la despensa ni terminar productos completos. Se pueden usar cantidades parciales y solo los ingredientes que tengan sentido para cada comida. La prioridad es crear un planning práctico, variado y realista.</p></div>
+  <table><thead><tr><th>Producto</th><th>Cantidad</th><th>Estado</th></tr></thead><tbody>${rows||'<tr><td colspan="3">Despensa vacía</td></tr>'}</tbody></table>
+  <div class="foot">Generado desde Mi vida en Niza · Planning Familia Laviña Pérez</div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  w.document.close();
 }
 function addShoppingText(text){text=text.trim();if(!text||shoppingHas(text))return false;nice.shopping.push({id:uid(),text});return true}
 function addIngredient(dayIndex,kind,name){name=name.trim();if(!name)return false;const arr=nice.weeks[key()][dayIndex][kind+'Ingredients'];if(arr.some(i=>norm(i.name||i.text)===norm(name)))return false;arr.push({id:uid(),name});return true}
@@ -104,6 +122,7 @@ function bind(){
   document.querySelectorAll('[data-nice-low]').forEach(b=>b.onclick=()=>{const x=nice.pantry.find(y=>y.id===b.dataset.niceLow);if(x){x.low=!x.low;save()}});
   document.querySelectorAll('[data-nice-more]').forEach(b=>b.onclick=()=>{const x=nice.pantry.find(y=>y.id===b.dataset.niceMore);if(x&&addShoppingText(x.text))save()});
   document.querySelectorAll('[data-nice-out]').forEach(b=>b.onclick=()=>{const x=nice.pantry.find(y=>y.id===b.dataset.niceOut);if(!x)return;nice.pantry=nice.pantry.filter(y=>y.id!==x.id);addShoppingText(x.text);save()});
+  const exportBtn=document.getElementById('nice-export-pantry');if(exportBtn)exportBtn.onclick=exportPantryPDF;
   const s=document.getElementById('nice-pantry-search');if(s)s.oninput=()=>{pantrySearch=s.value;renderNice()};
   document.querySelectorAll('[data-pfilter]').forEach(b=>b.onclick=()=>{pantryFilter=b.dataset.pfilter;renderNice()});
   if(document.getElementById('nice-prev'))document.getElementById('nice-prev').onclick=()=>{nice.weekOffset=(nice.weekOffset||0)-1;ingredientOpen='';ensure();save()};
