@@ -88,6 +88,7 @@ function shoppingHas(name){return inventoryMatch(name,nice.shopping)}
 function relateIngredient(name,product){nice.aliases[norm(name)]=product.text}
 function plannedCount(){const w=nice.weeks[key()]||[];return w.reduce((n,d)=>n+(d.lunch?1:0)+(d.dinner?1:0),0)}
 function missingForMeal(day,kind){return (day[kind+'Ingredients']||[]).filter(i=>!pantryHas(i.name||i.text)&&!shoppingHas(i.name||i.text))}
+function shoppingForMeal(day,kind){return (day[kind+'Ingredients']||[]).filter(i=>!pantryHas(i.name||i.text)&&shoppingHas(i.name||i.text))}
 function recipeByName(name){return nice.recipes.find(r=>norm(r.name)===norm(name))}
 function applyRecipe(day,kind,recipe){day[kind]=recipe.name;day[kind+'Ingredients']=normalizeIngs(recipe.ingredients)}
 function mealIngredientHtml(day,i,kind){
@@ -100,12 +101,13 @@ function mealIngredientHtml(day,i,kind){
  ${missingForMeal(day,kind).length?`<button class="nice-add-missing" data-add-missing="${openKey}">🛒 Añadir ${missingForMeal(day,kind).length} faltante${missingForMeal(day,kind).length>1?'s':''} a compra</button>`:''}</div>`;
 }
 function mealCard(day,i,kind,label){
- const text=day[kind]||'',ings=day[kind+'Ingredients']||[],missing=missingForMeal(day,kind),extra=day[kind+'Extra']||'';
- return `<div class="nice-meal-card ${text?'filled':''} ${missing.length?'needs':''}"><div class="nice-meal-top"><span>${label}</span>${ings.length?`<small>${missing.length?'⚠ '+missing.length+' falta'+(missing.length>1?'n':''):'✓ ingredientes OK'}</small>`:''}</div>
+ const text=day[kind]||'',ings=day[kind+'Ingredients']||[],missing=missingForMeal(day,kind),buying=shoppingForMeal(day,kind),extra=day[kind+'Extra']||'';
+ return `<div class="nice-meal-card ${text?'filled':''} ${missing.length?'needs':''}"><div class="nice-meal-top"><span>${label}</span>${ings.length?`<small>${missing.length?'⚠ '+missing.length+' falta'+(missing.length>1?'n':''):buying.length?'🛒 '+buying.length+' en compra':'✓ ingredientes OK'}</small>`:''}</div>
  <input list="nice-recipes-list" data-nice-meal="${i}:${kind}" value="${esc(text)}" placeholder="${kind==='lunch'?'¿Qué comes?':'¿Qué cenas?'}">
  ${extra?`<div class="nice-extra">${esc(extra)}</div>`:''}
  <div class="nice-meal-actions"><button class="nice-ing-toggle" data-toggle-ing="${i}:${kind}">${ings.length?'Ingredientes · '+ings.length:'＋ Ingredientes'}</button>${text&&!recipeByName(text)?`<button class="nice-save-recipe" data-save-from-meal="${i}:${kind}">♡ Guardar receta</button>`:''}</div>
- ${missing.length?`<div class="nice-warning">⚠ No tienes: ${missing.slice(0,3).map(x=>esc(x.name)).join(', ')}${missing.length>3?'…':''}</div>`:''}
+ ${missing.length?`<div class="nice-warning">⚠ No tienes: ${missing.map(x=>esc(x.name)).join(', ')}</div>`:''}
+ ${buying.length?`<div class="nice-buying-note">🛒 En compra: ${buying.map(x=>esc(x.name)).join(', ')}</div>`:''}
  ${mealIngredientHtml(day,i,kind)}</div>`;
 }
 function recipeCard(r){
