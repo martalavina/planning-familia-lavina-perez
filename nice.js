@@ -79,8 +79,17 @@ async function load(){if(busy)return;try{nice=await api('/api/nice');const seede
 async function save({rerender=true}={}){if(busy)return;busy=true;try{nice=await api('/api/nice',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(nice)});ensure();if(rerender)renderNice()}finally{busy=false}}
 function isMarta(){const selected=document.querySelector('.profile-card.selected strong');return selected&&selected.textContent.trim().toLowerCase()==='marta'}
 function mount(){const old=document.getElementById('nice-marta');if(!isMarta()){old?.remove();return}if(old)return;if(!nice){load();return}const profile=document.querySelector('.profile-zone');if(!profile)return;const sec=document.createElement('section');sec.id='nice-marta';sec.className='nice-space';profile.insertAdjacentElement('afterend',sec);renderNice()}
-function candidates(name){return norm(name).split(/\s*\/\s*|\s+o\s+/).map(x=>x.trim()).filter(Boolean)}
-function aliasTarget(name){const a=nice.aliases?.[norm(name)];return a?norm(a):''}
+function candidates(name){
+ const base=norm(name).split(/\s*\/\s*|\s+o\s+/).map(x=>x.trim()).filter(Boolean);
+ const n=norm(name);
+ if(/brotes baby|brotes|hojas verdes|mezclum|lechuga/.test(n))return [...new Set([...base,'brotes baby','brotes','lechuga','mezclum','hojas verdes'])];
+ return base;
+}
+function aliasTarget(name){
+ const n=norm(name),a=nice.aliases?.[n],v=a?norm(a):'';
+ if(/brotes baby|brotes|hojas verdes|mezclum|lechuga/.test(n)&&/^(te|té)$/.test(v))return '';
+ return v;
+}
 function inventoryMatch(name,list){
  const cs=candidates(name),alias=aliasTarget(name);
  return list.find(x=>{const v=norm(x.text);if(alias&&v===alias)return true;return cs.some(c=>v===c||(c.length>=4&&(v.includes(c)||c.includes(v))))})
