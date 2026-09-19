@@ -68,6 +68,9 @@ function ensure(){
  nice.weeks=nice.weeks&&typeof nice.weeks==='object'?nice.weeks:{};
  nice.recipes=Array.isArray(nice.recipes)?nice.recipes.map(r=>({...r,id:r.id||uid(),ingredients:normalizeIngs(r.ingredients)})):[];
  nice.aliases=nice.aliases&&typeof nice.aliases==='object'?nice.aliases:{};
+ for(const [ak,av] of Object.entries(nice.aliases)){
+   if(/brotes baby|brotes|hojas verdes|mezclum|lechuga/.test(norm(ak))&&/(^|\s)(te|infusion)(\s|$)|te verde|te negro|te rojo|manzanilla/.test(norm(av)))delete nice.aliases[ak];
+ }
  nice.batchDays=nice.batchDays&&typeof nice.batchDays==='object'?nice.batchDays:{};
  nice.batchEdits=nice.batchEdits&&typeof nice.batchEdits==='object'?nice.batchEdits:{};
  nice.pantry=nice.pantry.map(x=>({...x,count:Math.max(1,parseInt(x.count,10)||1),low:!!x.low}));
@@ -87,12 +90,12 @@ function candidates(name){
 }
 function aliasTarget(name){
  const n=norm(name),a=nice.aliases?.[n],v=a?norm(a):'';
- if(/brotes baby|brotes|hojas verdes|mezclum|lechuga/.test(n)&&/^(te|té)$/.test(v))return '';
+ if(/brotes baby|brotes|hojas verdes|mezclum|lechuga/.test(n)&&/(^|\s)(te|infusion)(\s|$)|te verde|te negro|te rojo|manzanilla/.test(v))return '';
  return v;
 }
 function inventoryMatch(name,list){
  const cs=candidates(name),alias=aliasTarget(name);
- return list.find(x=>{const v=norm(x.text);if(alias&&v===alias)return true;return cs.some(c=>v===c||(c.length>=4&&(v.includes(c)||c.includes(v))))})
+ return list.find(x=>{const v=norm(x.text);if(/brotes baby|brotes|hojas verdes|mezclum|lechuga/.test(norm(name))&&/(^|\s)(te|infusion)(\s|$)|te verde|te negro|te rojo|manzanilla/.test(v))return false;if(alias&&v===alias)return true;return cs.some(c=>v===c||(c.length>=4&&(v.includes(c)||c.includes(v))))})
 }
 function pantryHas(name){return inventoryMatch(name,nice.pantry)}
 function shoppingHas(name){return inventoryMatch(name,nice.shopping)}
