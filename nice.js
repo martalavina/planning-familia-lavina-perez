@@ -68,6 +68,7 @@ function ensure(){
  nice.weeks=nice.weeks&&typeof nice.weeks==='object'?nice.weeks:{};
  nice.recipes=Array.isArray(nice.recipes)?nice.recipes.map(r=>({...r,id:r.id||uid(),ingredients:normalizeIngs(r.ingredients)})):[];
  nice.aliases=nice.aliases&&typeof nice.aliases==='object'?nice.aliases:{};
+ nice.batchDays=nice.batchDays&&typeof nice.batchDays==='object'?nice.batchDays:{};
  nice.pantry=nice.pantry.map(x=>({...x,count:Math.max(1,parseInt(x.count,10)||1),low:!!x.low}));
  ensureWeek(key());
  return applySeeds();
@@ -123,6 +124,48 @@ function recipeCard(r){
  const miss=(r.ingredients||[]).filter(i=>!pantryHas(i.name)&&!shoppingHas(i.name));
  return `<article class="nice-recipe-card"><div class="nice-recipe-top"><div><h4>${esc(r.name)}</h4><span>${r.ingredients.length} ingredientes</span></div><div class="nice-recipe-card-actions"><button data-edit-recipe="${r.id}" title="Editar receta">✎</button><button data-del-recipe="${r.id}" title="Eliminar">×</button></div></div>${r.note?`<p>${esc(r.note)}</p>`:''}<div class="nice-recipe-status">${miss.length?`<span class="warn">⚠ Te faltan ${miss.length}</span>`:'<span class="ok">✓ Puedes hacerla</span>'}</div><details><summary>Ver ingredientes</summary><div class="nice-recipe-ings">${r.ingredients.map(i=>`<span class="${pantryHas(i.name)?'have':shoppingHas(i.name)?'buying':'missing'}">${esc(i.name)}</span>`).join('')}</div></details></article>`;
 }
+function batchMeals(){
+ const w=nice.weeks[key()]||[];
+ const out=[];
+ w.forEach((d,di)=>['lunch','dinner'].forEach(kind=>{if(d[kind])out.push({day:d.name,dayIndex:di,kind,name:d[kind],extra:d[kind+'Extra']||'',ingredients:d[kind+'Ingredients']||[],recipe:recipeByName(d[kind])})}));
+ return out;
+}
+function batchInfo(){
+ const meals=batchMeals(),counts=new Map();
+ meals.forEach(m=>{const seen=new Set();m.ingredients.forEach(i=>{const n=i.name||i.text||'';const k=norm(n);if(!k||seen.has(k))return;seen.add(k);const prev=counts.get(k)||{name:n,count:0,meals:[]};prev.count++;prev.meals.push(m.name);counts.set(k,prev)})});
+ const repeated=[...counts.values()].filter(x=>x.count>1).sort((a,b)=>b.count-a.count);
+ const all=[...counts.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));
+ const prepVeg=all.filter(x=>/(cebolla|pimiento|berenjena|tomate|boniato|patata|manzana)/.test(norm(x.name)));
+ const bases=all.filter(x=>/(arroz|pasta|patata|boniato|tortilla)/.test(norm(x.name)));
+ const proteins=all.filter(x=>/(pollo|carne|atun|huevo|jamon|butter chicken)/.test(norm(x.name)));
+ const fresh=all.filter(x=>/(brotes|yogur|mozzarella|huevo)/.test(norm(x.name)));
+ const batchFriendly=meals.filter(m=>/(bake|muffin|lasagna|pocket|patt|bite|rollito|boat)/.test(norm(m.name)));
+ const dayOf=meals.filter(m=>!batchFriendly.includes(m));
+ return {meals,repeated,prepVeg,bases,proteins,fresh,batchFriendly,dayOf};
+}
+function batchIngredientStatus(x){
+ const p=pantryHas(x.name),s=shoppingHas(x.name);
+ return p?'<span class="batch-have">✓ En despensa</span>':s?'<span class="batch-buying">🛒 En compra</span>':'<span class="batch-missing">⚠ Falta</span>';
+}
+function renderBatch(){
+ const b=batchInfo(),selected=nice.batchDays[key()];
+ const dates=names.map((n,i)=>{const d=monday(nice.weekOffset||0);d.setDate(d.getDate()+i);return `<button data-batch-day="${i}" class="${selected===i?'active':''}"><strong>${n.slice(0,3)}</strong><span>${d.getDate()}</span></button>`}).join('');
+ const repeated=b.repeated.map(x=>`<div class="batch-repeat-row"><div><strong>${esc(x.name)}</strong><span>${x.count} platos</span></div>${batchIngredientStatus(x)}</div>`).join('')||'<p class="nice-empty">Esta semana no se repiten muchos ingredientes.</p>';
+ const prep=(title,items,tip)=>`<div class="batch-step"><div class="batch-step-head"><span>${title}</span><small>${tip}</small></div><div class="batch-chips">${items.map(x=>`<span>${esc(x.name)} <b>×${x.count}</b></span>`).join('')||'<em>Nada específico esta semana</em>'}</div></div>`;
+ const mealRows=b.meals.map(m=>{const note=m.recipe?.note||'';const ready=b.batchFriendly.includes(m);return `<div class="batch-meal-row"><div class="batch-meal-day"><span>${m.day}</span><small>${m.kind==='lunch'?'Comida':'Cena'}</small></div><div class="batch-meal-main"><strong>${esc(m.name)}</strong>${m.extra?`<small>${esc(m.extra)}</small>`:''}${note?`<p>${esc(note)}</p>`:''}</div><span class="${ready?'batch-now':'batch-dayof'}">${ready?'Preparar en batch':'Terminar ese día'}</span></div>`}).join('');
+ const selectedLabel=selected===undefined?'Elige tu día':`${names[selected]} ${(()=>{const d=monday(nice.weekOffset||0);d.setDate(d.getDate()+selected);return d.getDate()})()}`;
+ return `<div class="batch-head"><div><p class="eyebrow">BATCH COOKING</p><h3>Deja la semana medio hecha.</h3><p>Se genera solo con tu planning y tus recetas de esta semana.</p></div><div class="batch-selected"><span>DÍA DE COCINAR</span><strong>${selectedLabel}</strong></div></div>
+ <div class="batch-days">${dates}</div>
+ <div class="batch-summary"><div><strong>${b.meals.length}</strong><span>platos planeados</span></div><div><strong>${b.repeated.length}</strong><span>ingredientes repetidos</span></div><div><strong>${b.batchFriendly.length}</strong><span>puedes adelantar</span></div></div>
+ <section class="batch-block"><div class="batch-block-title"><div><span>01</span><div><h4>Prepara una vez</h4><p>Lo que aparece en varios platos, para no repetir trabajo.</p></div></div></div><div class="batch-repeat-list">${repeated}</div></section>
+ <section class="batch-block"><div class="batch-block-title"><div><span>02</span><div><h4>Orden de la sesión</h4><p>Una ruta práctica para hacer varias cosas a la vez.</p></div></div></div>
+ ${prep('CORTAR Y DEJAR LISTO',b.prepVeg,'Hazlo primero y reparte por recetas')}
+ ${prep('COCER / PREPARAR BASES',b.bases,'Mientras cortas, deja estas bases en marcha')}
+ ${prep('PROTEÍNAS',b.proteins,'Cocina o porciona según cada receta')}
+ </section>
+ <section class="batch-block"><div class="batch-block-title"><div><span>03</span><div><h4>Qué adelantar de cada plato</h4><p>El batch no obliga a cocinarlo todo: algunos platos quedan mejor terminados en el día.</p></div></div></div><div class="batch-meals">${mealRows||'<p class="nice-empty">Todavía no hay platos en esta semana.</p>'}</div></section>
+ <section class="batch-block batch-fresh"><div class="batch-block-title"><div><span>04</span><div><h4>Deja fresco para el día</h4><p>Ingredientes que normalmente compensa añadir o terminar justo antes de comer.</p></div></div></div><div class="batch-chips">${b.fresh.map(x=>`<span>${esc(x.name)}</span>`).join('')||'<em>Nada especial esta semana</em>'}</div></section>`;
+}
 function renderNice(){
  if(!isMarta())return;let sec=document.getElementById('nice-marta');if(!sec){mount();sec=document.getElementById('nice-marta');if(!sec)return}
  ensure();const oldScroll=sec.querySelector('.nice-days')?.scrollLeft||0,pageY=window.scrollY,active=nice.weeks[key()];
@@ -134,10 +177,11 @@ function renderNice(){
  const recipes=nice.recipes.filter(r=>!recipeSearch||norm(r.name).includes(norm(recipeSearch))||r.ingredients.some(i=>norm(i.name).includes(norm(recipeSearch))));
  sec.innerHTML=`<datalist id="nice-recipes-list">${nice.recipes.map(r=>`<option value="${esc(r.name)}"></option>`).join('')}</datalist><div class="nice-head"><div><p class="eyebrow">MARTA · NIZA 🇫🇷</p><h2>Mi vida en Niza</h2><p>Tu cocina, tu despensa y tus ideas en un solo sitio.</p></div><span class="nice-date">Sep 2026 — Mar 2027</span></div>
  <div class="nice-overview"><div><strong>${nice.shopping.length}</strong><span>por comprar</span></div><div><strong>${nice.pantry.length}</strong><span>en despensa</span></div><div><strong>${plannedCount()}/14</strong><span>comidas planeadas</span></div></div>
- <div class="nice-tabs"><button data-nice-tab="shopping" class="${tab==='shopping'?'active':''}">🛒 Compra</button><button data-nice-tab="pantry" class="${tab==='pantry'?'active':''}">🥫 Despensa</button><button data-nice-tab="planning" class="${tab==='planning'?'active':''}">🍽 Planning</button><button data-nice-tab="recipes" class="${tab==='recipes'?'active':''}">♡ Recetas</button></div>
+ <div class="nice-tabs"><button data-nice-tab="shopping" class="${tab==='shopping'?'active':''}">🛒 Compra</button><button data-nice-tab="pantry" class="${tab==='pantry'?'active':''}">🥫 Despensa</button><button data-nice-tab="planning" class="${tab==='planning'?'active':''}">🍽 Planning</button><button data-nice-tab="batch" class="${tab==='batch'?'active':''}">👩‍🍳 Batch cooking</button><button data-nice-tab="recipes" class="${tab==='recipes'?'active':''}">♡ Recetas</button></div>
  <div class="nice-panel">${tab==='shopping'? `<div class="nice-title"><div><p class="eyebrow">LISTA DE LA COMPRA</p><h3>Comprar sin pensar de más</h3></div><span>${nice.shopping.length} pendiente${nice.shopping.length===1?'':'s'}</span></div><div class="nice-add prominent"><input id="nice-new-shop" placeholder="Añadir producto…"><button id="nice-add-shop">＋ Añadir</button></div>${quickFromPantry.length?`<div class="nice-quick"><span>Añadir desde despensa</span><div>${quickFromPantry.map(p=>`<button data-nice-quick-shop="${p.id}">＋ ${esc(p.text)}</button>`).join('')}</div></div>`:''}<div class="nice-shop-list">${shop}</div>`:
  tab==='pantry'? `<div class="nice-title"><div><p class="eyebrow">DESPENSA DE NIZA</p><h3>Lo que tienes ahora mismo</h3></div><div class="nice-title-actions"><span>${nice.pantry.length} productos</span><button id="nice-export-pantry" class="nice-export">⇩ Exportar PDF</button></div></div><div class="nice-pantry-tools"><input id="nice-pantry-search" value="${esc(pantrySearch)}" placeholder="Buscar…"><div class="nice-filter"><button data-pfilter="all" class="${pantryFilter==='all'?'active':''}">Todo</button><button data-pfilter="low" class="${pantryFilter==='low'?'active':''}">Queda poco</button><button data-pfilter="shopping" class="${pantryFilter==='shopping'?'active':''}">En compra</button></div></div><div class="nice-pantry-list">${pantry}</div><div class="nice-add"><input id="nice-new-pantry" placeholder="Añadir producto…"><button id="nice-add-pantry">＋ Añadir</button></div>`:
  tab==='planning'? `<div class="nice-planning-head"><div><p class="eyebrow">PLANNING SEMANAL</p><h3>Tu semana, de un vistazo</h3><p>Escribe rápido o elige una receta: si la reconoce, añade sus ingredientes sola.</p></div><div class="nice-week"><button id="nice-prev">←</button><strong>${weekLabel()}</strong><button id="nice-next">→</button></div></div><div class="nice-days">${days}</div>`:
+ tab==='batch'? renderBatch():
  `<div class="nice-recipes-head"><div><p class="eyebrow">MIS RECETAS</p><h3>Ideas que no quieres perder</h3><p>Cuando uses el mismo nombre en el planning, sus ingredientes se cargarán automáticamente.</p></div><input id="nice-recipe-search" value="${esc(recipeSearch)}" placeholder="Buscar receta o ingrediente…"></div><details class="nice-new-recipe"><summary>＋ Guardar nueva receta</summary><div class="nice-recipe-form"><input id="nice-recipe-name" placeholder="Nombre de la receta"><input id="nice-recipe-ingredients" placeholder="Ingredientes separados por comas"><textarea id="nice-recipe-note" placeholder="Nota, preparación o idea (opcional)"></textarea><button id="nice-add-recipe">Guardar receta</button></div></details><div class="nice-recipe-grid">${recipes.map(recipeCard).join('')||'<p class="nice-empty">No hay recetas que coincidan.</p>'}</div>`}
  </div>`;
  bind();requestAnimationFrame(()=>{window.scrollTo(0,pageY);const d=sec.querySelector('.nice-days');if(d)d.scrollLeft=oldScroll});
@@ -161,6 +205,7 @@ function bind(){
  document.querySelectorAll('[data-nice-out]').forEach(b=>b.onclick=()=>{const x=nice.pantry.find(y=>y.id===b.dataset.niceOut);if(!x)return;nice.pantry=nice.pantry.filter(y=>y.id!==x.id);addShoppingText(x.text);save()});
  document.getElementById('nice-export-pantry')?.addEventListener('click',exportPantryPDF);
  const ps=document.getElementById('nice-pantry-search');if(ps)ps.oninput=()=>{pantrySearch=ps.value;renderNice()};document.querySelectorAll('[data-pfilter]').forEach(b=>b.onclick=()=>{pantryFilter=b.dataset.pfilter;renderNice()});
+ document.querySelectorAll('[data-batch-day]').forEach(b=>b.onclick=()=>{nice.batchDays[key()]=+b.dataset.batchDay;save()});
  document.getElementById('nice-prev')?.addEventListener('click',()=>{nice.weekOffset=(nice.weekOffset||0)-1;ingredientOpen='';ensureWeek(key());save()});
  document.getElementById('nice-next')?.addEventListener('click',()=>{nice.weekOffset=(nice.weekOffset||0)+1;ingredientOpen='';ensureWeek(key());save()});
  document.querySelectorAll('[data-nice-meal]').forEach(i=>i.onchange=()=>{const [d,k]=i.dataset.niceMeal.split(':'),day=nice.weeks[key()][+d],val=i.value.trim(),rec=recipeByName(val);day[k]=val;if(rec)day[k+'Ingredients']=normalizeIngs(rec.ingredients);save()});
