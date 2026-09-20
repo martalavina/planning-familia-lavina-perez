@@ -73,6 +73,7 @@ function ensure(){
  }
  nice.batchDays=nice.batchDays&&typeof nice.batchDays==='object'?nice.batchDays:{};
  nice.batchEdits=nice.batchEdits&&typeof nice.batchEdits==='object'?nice.batchEdits:{};
+ nice.batchSessions=nice.batchSessions&&typeof nice.batchSessions==='object'?nice.batchSessions:{};
  nice.pantry=nice.pantry.map(x=>({...x,count:Math.max(1,parseInt(x.count,10)||1),low:!!x.low}));
  ensureWeek(key());
  return applySeeds();
@@ -120,7 +121,7 @@ function mealCard(day,i,kind,label){
  <input list="nice-recipes-list" data-nice-meal="${i}:${kind}" value="${esc(text)}" placeholder="${kind==='lunch'?'¿Qué comes?':'¿Qué cenas?'}">
  ${extra?`<div class="nice-extra">${esc(extra)}</div>`:''}
  <div class="nice-meal-actions"><button class="nice-ing-toggle" data-toggle-ing="${i}:${kind}">${ings.length?'Ingredientes · '+ings.length:'＋ Ingredientes'}</button>${text&&!recipeByName(text)?`<button class="nice-save-recipe" data-save-from-meal="${i}:${kind}">♡ Guardar receta</button>`:''}</div>
- ${text?`<div class="nice-meal-status"><button data-meal-status="${i}:${kind}:prepared" class="${prepared?'active prepared':''}">✓ Hecho</button><button data-meal-status="${i}:${kind}:eaten" class="${eaten?'active eaten':''}">✓ Comido</button><button data-meal-status="${i}:${kind}:other" class="${other?'active other':''}">↪ Otra cosa</button><button data-carry-meal="${i}:${kind}" class="carry">🥡 Aprovechar mañana</button></div>`:''}
+ ${text?`<div class="nice-meal-status"><button data-meal-status="${i}:${kind}:prepared" class="${prepared?'active prepared':''}">✓ Hecho</button><button data-meal-status="${i}:${kind}:eaten" class="${eaten?'active eaten':''}">✓ Comido</button><button data-meal-status="${i}:${kind}:other" class="${other?'active other':''}">↪ Otra cosa</button><button data-carry-meal="${i}:${kind}" class="carry">🥡 Aprovechar mañana</button><button data-open-swap="${i}:${kind}" class="swap">⇄ Intercambiar</button></div><div class="nice-swap-box" data-swap-box="${i}:${kind}" hidden><span>Intercambiar esta ${kind==='lunch'?'comida':'cena'} con:</span><select data-swap-select="${i}:${kind}">${names.map((n,di)=>di===i?'':`<option value="${di}">${n}</option>`).join('')}</select><button data-swap-confirm="${i}:${kind}">Intercambiar</button></div>`:''}
  ${missing.length?`<div class="nice-warning">⚠ No tienes: ${missing.map(x=>esc(x.name)).join(', ')}</div>`:''}
  ${buying.length?`<div class="nice-buying-note">🛒 En compra: ${buying.map(x=>esc(x.name)).join(', ')}</div>`:''}
  ${mealIngredientHtml(day,i,kind)}</div>`;
@@ -185,27 +186,45 @@ function batchIngredientStatus(x){
  const p=pantryHas(x.name),s=shoppingHas(x.name);
  return p?'<span class="batch-have">✓ En despensa</span>':s?'<span class="batch-buying">🛒 En compra</span>':'<span class="batch-missing">⚠ Falta</span>';
 }
+function batchSession(){
+ const k=key(),s=nice.batchSessions[k]||(nice.batchSessions[k]={notes:'',customSteps:[],done:{}});
+ s.notes=String(s.notes||'');s.customSteps=Array.isArray(s.customSteps)?s.customSteps:[];s.done=s.done&&typeof s.done==='object'?s.done:{};
+ return s;
+}
+function batchAutoSteps(b){
+ const out=[];
+ const add=(id,title,detail)=>{if(detail)out.push({id,title,detail,auto:true})};
+ add('prep-veg','1. Lava, corta y reparte las verduras',b.prepVeg.map(x=>`${x.name} ×${x.count}`).join(' · '));
+ add('bases','2. Pon en marcha las bases',b.bases.map(x=>`${x.name} ×${x.count}`).join(' · '));
+ add('proteins','3. Cocina o porciona las proteínas',b.proteins.map(x=>`${x.name} ×${x.count}`).join(' · '));
+ const batchNames=b.batchFriendly.map(m=>m.name).join(' · ');
+ add('assemble','4. Monta los platos que puedes adelantar',batchNames);
+ const dayNames=b.pending.filter(m=>!b.batchFriendly.includes(m)).map(m=>m.name).join(' · ');
+ add('dayof','5. Deja preparado lo que terminarás en el día',dayNames);
+ if(b.pending.length)add('store','6. Guarda y etiqueta',`${b.pending.length} platos pendientes en la sesión · separa por día para verlo rápido`);
+ return out;
+}
 function renderBatch(){
- const b=batchInfo(),selected=nice.batchDays[key()];
+ const b=batchInfo(),selected=nice.batchDays[key()],session=batchSession(),autoSteps=batchAutoSteps(b);
  const dates=names.map((n,i)=>{const d=monday(nice.weekOffset||0);d.setDate(d.getDate()+i);return `<button data-batch-day="${i}" class="${selected===i?'active':''}"><strong>${n.slice(0,3)}</strong><span>${d.getDate()}</span></button>`}).join('');
- const repeated=b.repeated.map(x=>`<div class="batch-repeat-row"><div><strong>${esc(x.name)}</strong><span>${x.count} platos</span></div>${batchIngredientStatus(x)}</div>`).join('')||'<p class="nice-empty">No hay ingredientes muy repetidos en esta sesión.</p>';
- const ingredientRows=b.all.map(x=>`<div class="batch-ingredient-row"><strong>${esc(x.name)}</strong><span>${x.count>1?'×'+x.count+' platos':'1 plato'}</span>${batchIngredientStatus(x)}</div>`).join('')||'<p class="nice-empty">Elige primero el día de batch cooking.</p>';
- const prep=(title,items,tip)=>`<div class="batch-step"><div class="batch-step-head"><span>${title}</span><small>${tip}</small></div><div class="batch-chips">${items.map(x=>`<span>${esc(x.name)} <b>×${x.count}</b></span>`).join('')||'<em>Nada específico</em>'}</div></div>`;
- const mealRows=b.meals.map(m=>{const edit=batchEdit(m),note=edit.note||m.recipe?.note||'',ready=edit.mode==='batch',doneLabel=m.eaten?'✓ Comido':m.ateOther?'↪ Comiste otra cosa':m.leftover?'🥡 Aprovechado':m.prepared?'✓ Ya hecho':'';return `<div class="batch-meal-row ${doneLabel?'batch-complete':''}"><div class="batch-meal-day"><span>${m.day}</span><small>${m.weekLabel} · ${m.kind==='lunch'?'Comida':'Cena'}</small></div><div class="batch-meal-main"><strong>${esc(m.name)}</strong>${m.extra?`<small>${esc(m.extra)}</small>`:''}${note?`<p>${esc(note)}</p>`:''}</div><div class="batch-meal-controls">${doneLabel?`<span class="batch-done">${doneLabel}</span>`:`<span class="${ready?'batch-now':'batch-dayof'}">${ready?'Preparar en batch':'Terminar ese día'}</span><button data-batch-edit="${esc(m.id)}" title="Editar">✎</button>`}</div>${!doneLabel?`<div class="batch-edit-box" data-batch-edit-box="${esc(m.id)}" hidden><label><span>Qué quieres dejar hecho</span><textarea data-batch-note="${esc(m.id)}" placeholder="Ej. dejar montado y gratinar al comer…">${esc(edit.note)}</textarea></label><div class="batch-mode-buttons"><button data-batch-mode="${esc(m.id)}:batch" class="${ready?'active':''}">Preparar en batch</button><button data-batch-mode="${esc(m.id)}:day" class="${!ready?'active':''}">Terminar ese día</button></div><button class="batch-save-edit" data-batch-save="${esc(m.id)}">Guardar</button></div>`:''}</div>`}).join('');
  const selectedLabel=selected===undefined?'Elige tu día':`${names[selected]} ${(()=>{const d=monday(nice.weekOffset||0);d.setDate(d.getDate()+selected);return d.getDate()})()}`;
  const scope=selected===undefined?'Selecciona el día para generar la sesión':selected>=4?'Desde ese día + toda la semana siguiente':'Desde ese día hasta el domingo';
- return `<div class="batch-head"><div><p class="eyebrow">BATCH COOKING</p><h3>Deja la semana medio hecha.</h3><p>Se genera con tu planning, recetas y acompañamientos.</p></div><div class="batch-selected"><span>DÍA DE COCINAR</span><strong>${selectedLabel}</strong><small>${scope}</small></div></div>
+ const missing=b.all.filter(x=>!pantryHas(x.name)&&!shoppingHas(x.name));
+ const buying=b.all.filter(x=>!pantryHas(x.name)&&shoppingHas(x.name));
+ const repeated=b.repeated.slice(0,8);
+ const repeatedHtml=repeated.map(x=>`<span>${esc(x.name)} <b>×${x.count}</b></span>`).join('')||'<em>No hay ingredientes especialmente repetidos.</em>';
+ const autoHtml=autoSteps.map(s=>`<div class="batch-guide-step ${session.done[s.id]?'done':''}"><button data-batch-step-toggle="${s.id}" class="batch-check">${session.done[s.id]?'✓':'○'}</button><div><strong>${esc(s.title)}</strong><p>${esc(s.detail)}</p></div></div>`).join('');
+ const customHtml=session.customSteps.map((s,idx)=>`<div class="batch-guide-step custom ${session.done[s.id]?'done':''}"><button data-batch-step-toggle="${s.id}" class="batch-check">${session.done[s.id]?'✓':'○'}</button><div><input data-custom-step-text="${idx}" value="${esc(s.text)}"></div><button data-custom-step-del="${idx}" class="batch-step-del">×</button></div>`).join('');
+ const mealRows=b.meals.map(m=>{const edit=batchEdit(m),note=edit.note||m.recipe?.note||'',ready=edit.mode==='batch',doneLabel=m.eaten?'✓ Comido':m.ateOther?'↪ Comiste otra cosa':m.leftover?'🥡 Aprovechado':m.prepared?'✓ Ya hecho':'';return `<div class="batch-meal-row ${doneLabel?'batch-complete':''}"><div class="batch-meal-day"><span>${m.day}</span><small>${m.weekLabel} · ${m.kind==='lunch'?'Comida':'Cena'}</small></div><div class="batch-meal-main"><strong>${esc(m.name)}</strong>${m.extra?`<small>${esc(m.extra)}</small>`:''}${note?`<p>${esc(note)}</p>`:''}</div><div class="batch-meal-controls">${doneLabel?`<span class="batch-done">${doneLabel}</span>`:`<span class="${ready?'batch-now':'batch-dayof'}">${ready?'Preparar en batch':'Terminar ese día'}</span><button data-batch-edit="${esc(m.id)}" title="Editar">✎</button>`}</div>${!doneLabel?`<div class="batch-edit-box" data-batch-edit-box="${esc(m.id)}" hidden><label><span>Qué quieres dejar hecho</span><textarea data-batch-note="${esc(m.id)}" placeholder="Ej. dejar montado y gratinar al comer…">${esc(edit.note)}</textarea></label><div class="batch-mode-buttons"><button data-batch-mode="${esc(m.id)}:batch" class="${ready?'active':''}">Preparar en batch</button><button data-batch-mode="${esc(m.id)}:day" class="${!ready?'active':''}">Terminar ese día</button></div><button class="batch-save-edit" data-batch-save="${esc(m.id)}">Guardar</button></div>`:''}</div>`}).join('');
+ const ingSummary=b.all.map(x=>`<div class="batch-ingredient-row"><strong>${esc(x.name)}</strong><span>${x.count>1?'×'+x.count:'1 vez'}</span>${batchIngredientStatus(x)}</div>`).join('')||'<p class="nice-empty">No hay ingredientes pendientes.</p>';
+ return `<div class="batch-head"><div><p class="eyebrow">BATCH COOKING</p><h3>Tu sesión de cocina, paso a paso.</h3><p>Primero organiza, luego cocina. Puedes marcar pasos, añadir los tuyos y dejar notas.</p></div><div class="batch-selected"><span>DÍA DE COCINAR</span><strong>${selectedLabel}</strong><small>${scope}</small></div></div>
  <div class="batch-days">${dates}</div>
- <div class="batch-summary"><div><strong>${b.pending.length}</strong><span>platos pendientes</span></div><div><strong>${b.repeated.length}</strong><span>ingredientes repetidos</span></div><div><strong>${b.batchFriendly.length}</strong><span>para adelantar</span></div></div>
- <section class="batch-block"><div class="batch-block-title"><div><span>01</span><div><h4>Control de ingredientes</h4><p>Incluye también acompañamientos, aunque solo aparezcan una vez.</p></div></div></div><div class="batch-ingredient-list">${ingredientRows}</div></section>
- <section class="batch-block"><div class="batch-block-title"><div><span>02</span><div><h4>Prepara una vez</h4><p>Lo que aparece en varios platos, para no repetir trabajo.</p></div></div></div><div class="batch-repeat-list">${repeated}</div></section>
- <section class="batch-block"><div class="batch-block-title"><div><span>03</span><div><h4>Orden de la sesión</h4><p>Una ruta práctica para hacer varias cosas a la vez.</p></div></div></div>
- ${prep('CORTAR Y DEJAR LISTO',b.prepVeg,'Hazlo primero y reparte por recetas')}
- ${prep('COCER / PREPARAR BASES',b.bases,'Mientras cortas, deja estas bases en marcha')}
- ${prep('PROTEÍNAS',b.proteins,'Cocina o porciona según cada receta')}
- </section>
- <section class="batch-block"><div class="batch-block-title"><div><span>04</span><div><h4>Qué adelantar de cada plato</h4><p>Puedes editar cada decisión sin cambiar tu receta ni el planning.</p></div></div></div><div class="batch-meals">${mealRows||'<p class="nice-empty">Elige el día de batch cooking o añade platos al planning.</p>'}</div></section>
- <section class="batch-block batch-fresh"><div class="batch-block-title"><div><span>05</span><div><h4>Deja fresco para el día</h4><p>Ingredientes que normalmente compensa añadir o terminar justo antes de comer.</p></div></div></div><div class="batch-chips">${b.fresh.map(x=>`<span>${esc(x.name)}</span>`).join('')||'<em>Nada especial</em>'}</div></section>`;
+ <div class="batch-summary"><div><strong>${b.pending.length}</strong><span>platos pendientes</span></div><div><strong>${missing.length}</strong><span>ingredientes que faltan</span></div><div><strong>${buying.length}</strong><span>ya en compra</span></div></div>
+ <section class="batch-block batch-guide"><div class="batch-block-title"><div><span>01</span><div><h4>Tu ruta de cocina</h4><p>Sigue este orden para no ir saltando de una cosa a otra.</p></div></div></div><div class="batch-guide-list">${autoHtml}${customHtml}</div><div class="batch-add-step"><input id="batch-new-step" placeholder="Añadir un paso propio…"><button id="batch-add-step">＋ Añadir paso</button></div></section>
+ <section class="batch-block batch-focus"><div class="batch-block-title"><div><span>02</span><div><h4>Antes de empezar</h4><p>Lo más importante de la sesión de hoy.</p></div></div></div><div class="batch-focus-grid"><div><span>TE FALTA</span><strong>${missing.length?missing.map(x=>esc(x.name)).join(', '):'Nada 🎉'}</strong></div><div><span>YA ESTÁ EN COMPRA</span><strong>${buying.length?buying.map(x=>esc(x.name)).join(', '):'Nada pendiente'}</strong></div><div><span>PREPARA UNA VEZ</span><div class="batch-chips">${repeatedHtml}</div></div></div></section>
+ <section class="batch-block batch-plan"><div class="batch-block-title"><div><span>03</span><div><h4>Qué vas a dejar hecho</h4><p>Cada plato te dice si conviene adelantarlo o terminarlo en el día.</p></div></div></div><div class="batch-meals">${mealRows||'<p class="nice-empty">Elige el día de batch cooking o añade platos al planning.</p>'}</div></section>
+ <section class="batch-block batch-notes"><div class="batch-block-title"><div><span>04</span><div><h4>Notas de esta sesión</h4><p>Apunta cantidades, tiempos, cambios o cualquier cosa que quieras recordar.</p></div></div></div><textarea id="batch-session-notes" placeholder="Ej. usar primero la berenjena abierta · dejar dos raciones de arroz · no gratinar hasta el martes…">${esc(session.notes)}</textarea><small>Se guarda solo para esta semana de batch cooking.</small></section>
+ <details class="batch-block batch-ingredients"><summary>Ver control completo de ingredientes · ${b.all.length}</summary><div class="batch-ingredient-list">${ingSummary}</div></details>`;
 }
 function renderNice(){
  if(!isMarta())return;let sec=document.getElementById('nice-marta');if(!sec){mount();sec=document.getElementById('nice-marta');if(!sec)return}
@@ -284,6 +303,13 @@ function bind(){
  document.querySelectorAll('[data-nice-meal]').forEach(i=>i.onchange=()=>{const [d,k]=i.dataset.niceMeal.split(':'),day=nice.weeks[key()][+d],val=i.value.trim(),rec=recipeByName(val);day[k]=val;if(rec)day[k+'Ingredients']=normalizeIngs(rec.ingredients);save()});
  document.querySelectorAll('[data-meal-status]').forEach(b=>b.onclick=()=>{const [d,k,status]=b.dataset.mealStatus.split(':'),day=nice.weeks[key()][+d];if(status==='prepared')day[k+'Prepared']=!day[k+'Prepared'];if(status==='eaten'){day[k+'Eaten']=!day[k+'Eaten'];if(day[k+'Eaten'])day[k+'AteOther']=false}if(status==='other'){day[k+'AteOther']=!day[k+'AteOther'];if(day[k+'AteOther'])day[k+'Eaten']=false}save()});
  document.querySelectorAll('[data-carry-meal]').forEach(b=>b.onclick=()=>{const [d,k]=b.dataset.carryMeal.split(':'),src=nice.weeks[key()][+d];if(!src?.[k])return;const next=nextMealSlot(+d,k);if(next.day[k])pushPlannedForward(next.wk,next.idx-1,k);setMealSlot(next.day,k,mealSlotData(src,k),{asLeftover:true});src[k+'Prepared']=true;save()});
+ document.querySelectorAll('[data-open-swap]').forEach(b=>b.onclick=()=>{const box=b.closest('.nice-meal-card')?.querySelector('[data-swap-box]');if(box)box.hidden=!box.hidden});
+ document.querySelectorAll('[data-swap-confirm]').forEach(b=>b.onclick=()=>{const [from,kind]=b.dataset.swapConfirm.split(':'),box=b.closest('.nice-swap-box'),sel=box?.querySelector('[data-swap-select]'),to=+sel?.value;if(!Number.isInteger(to)||to===+from)return;const a=nice.weeks[key()][+from],z=nice.weeks[key()][to],aData=mealSlotData(a,kind),zData=mealSlotData(z,kind);setMealSlot(a,kind,zData);setMealSlot(z,kind,aData);save()});
+ document.querySelectorAll('[data-batch-step-toggle]').forEach(b=>b.onclick=()=>{const s=batchSession();s.done[b.dataset.batchStepToggle]=!s.done[b.dataset.batchStepToggle];save()});
+ document.querySelectorAll('[data-custom-step-text]').forEach(i=>i.onchange=()=>{const s=batchSession(),x=s.customSteps[+i.dataset.customStepText];if(x){x.text=i.value.trim();save()}});
+ document.querySelectorAll('[data-custom-step-del]').forEach(b=>b.onclick=()=>{const s=batchSession(),x=s.customSteps[+b.dataset.customStepDel];if(x)delete s.done[x.id];s.customSteps.splice(+b.dataset.customStepDel,1);save()});
+ const addBatchStep=document.getElementById('batch-add-step');if(addBatchStep){const fn=()=>{const inp=document.getElementById('batch-new-step'),v=inp.value.trim();if(!v)return;batchSession().customSteps.push({id:'custom-'+uid(),text:v});save()};addBatchStep.onclick=fn;document.getElementById('batch-new-step').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();fn()}}}
+ const batchNotes=document.getElementById('batch-session-notes');if(batchNotes)batchNotes.onchange=()=>{batchSession().notes=batchNotes.value;save({rerender:false})};
  document.querySelectorAll('[data-nice-note]').forEach(i=>i.onchange=()=>{nice.weeks[key()][+i.dataset.niceNote].note=i.value;save({rerender:false})});
  document.querySelectorAll('[data-toggle-ing]').forEach(b=>b.onclick=()=>{ingredientOpen=ingredientOpen===b.dataset.toggleIng?'':b.dataset.toggleIng;renderNice()});
  document.querySelectorAll('[data-close-ing]').forEach(b=>b.onclick=()=>{ingredientOpen='';renderNice()});
