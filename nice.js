@@ -155,14 +155,11 @@ function mealIngredients(day,kind){
 function batchMeals(){
  const selected=nice.batchDays[key()];
  if(selected===undefined)return [];
- const weeks=[{k:key(),start:selected,label:'Esta semana'}];
- if(selected>=4)weeks.push({k:weekKeyAt(1),start:0,label:'Semana siguiente'});
- const out=[];
- for(const wk of weeks){
-   ensureWeek(wk.k);
-   const w=nice.weeks[wk.k]||[];
-   w.forEach((d,di)=>{if(di<wk.start)return;['lunch','dinner'].forEach(kind=>{if(d[kind])out.push({weekKey:wk.k,weekLabel:wk.label,day:d.name,dayIndex:di,kind,id:`${wk.k}:${di}:${kind}`,name:d[kind],extra:d[kind+'Extra']||'',ingredients:mealIngredients(d,kind),recipe:recipeByName(d[kind]),prepared:!!d[kind+'Prepared'],eaten:!!d[kind+'Eaten'],ateOther:!!d[kind+'AteOther'],leftover:!!d[kind+'Leftover']})})});
- }
+ const targetKey=selected>=4?weekKeyAt(1):key();
+ const label=selected>=4?'Semana siguiente':'Esta semana';
+ ensureWeek(targetKey);
+ const w=nice.weeks[targetKey]||[],out=[];
+ w.forEach((d,di)=>['lunch','dinner'].forEach(kind=>{if(d[kind])out.push({weekKey:targetKey,weekLabel:label,day:d.name,dayIndex:di,kind,id:`${targetKey}:${di}:${kind}`,name:d[kind],extra:d[kind+'Extra']||'',ingredients:mealIngredients(d,kind),recipe:recipeByName(d[kind]),prepared:!!d[kind+'Prepared'],eaten:!!d[kind+'Eaten'],ateOther:!!d[kind+'AteOther'],leftover:!!d[kind+'Leftover']})}));
  return out;
 }
 function batchEdit(m){
@@ -208,7 +205,7 @@ function renderBatch(){
  const b=batchInfo(),selected=nice.batchDays[key()],session=batchSession(),autoSteps=batchAutoSteps(b);
  const dates=names.map((n,i)=>{const d=monday(nice.weekOffset||0);d.setDate(d.getDate()+i);return `<button data-batch-day="${i}" class="${selected===i?'active':''}"><strong>${n.slice(0,3)}</strong><span>${d.getDate()}</span></button>`}).join('');
  const selectedLabel=selected===undefined?'Elige tu día':`${names[selected]} ${(()=>{const d=monday(nice.weekOffset||0);d.setDate(d.getDate()+selected);return d.getDate()})()}`;
- const scope=selected===undefined?'Selecciona el día para generar la sesión':selected>=4?'Desde ese día + toda la semana siguiente':'Desde ese día hasta el domingo';
+ const scope=selected===undefined?'Selecciona el día para generar la sesión':selected>=4?'Preparando toda la semana siguiente · lunes a domingo':'Preparando toda esta semana · lunes a domingo';
  const missing=b.all.filter(x=>!pantryHas(x.name)&&!shoppingHas(x.name));
  const buying=b.all.filter(x=>!pantryHas(x.name)&&shoppingHas(x.name));
  const repeated=b.repeated.slice(0,8);
